@@ -1,76 +1,171 @@
 <!doctype html>
-<html lang="en" data-theme="default-dark">
+<html lang="ko">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Tic-Tac-Toe</title>
-    <!-- og:* metadata is REQUIRED before publishing — an empty og:title makes the
-         marketplace card invisible. Fill these in for your game. -->
-    <meta property="og:title" content="Tic-Tac-Toe" />
-    <meta property="og:description" content="A two-player game of tic-tac-toe." />
+    <title>서울 드론 파일럿</title>
+    <meta name="description" content="서울 도심을 본뜬 가벼운 3D 구역에서 드론을 조종해 레이스, 미션, 가상 전투를 즐기는 웹 시뮬레이터." />
+    <meta property="og:title" content="서울 드론 파일럿" />
+    <meta property="og:description" content="서울 도심을 본뜬 가벼운 3D 구역에서 드론을 조종해 레이스, 미션, 가상 전투를 즐기는 웹 시뮬레이터." />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23131b2e'/%3E%3Cg stroke='%23ffb347' stroke-width='5' stroke-linecap='round'%3E%3Cpath d='M20 20l24 24M44 20L20 44'/%3E%3C/g%3E%3Cg fill='none' stroke='%235ee0d0' stroke-width='4'%3E%3Ccircle cx='17' cy='17' r='8'/%3E%3Ccircle cx='47' cy='17' r='8'/%3E%3Ccircle cx='17' cy='47' r='8'/%3E%3Ccircle cx='47' cy='47' r='8'/%3E%3C/g%3E%3C/svg%3E" />
     <style>
       :root {
         color-scheme: dark;
-        --bg: #0b0c0e;
-        --fg: #f4f4f5;
-        --dim: #8b8d94;
-        --line: #23262a;
-        --accent: #c8fa4b;
-        --error: #ff6b6b;
+        --ink: #f3f5fa; --dim: #a9b2c6; --panel: rgba(13, 19, 34, 0.84); --line: rgba(255, 255, 255, 0.13);
+        --amber: #ffb347; --teal: #5ee0d0; --red: #ff5d5d; --green: #3ddc84; --blue: #5aa2ff;
       }
       * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        min-height: 100dvh;
-        display: grid;
-        place-content: center;
-        gap: 1.25rem;
-        justify-items: center;
-        background: var(--bg);
-        color: var(--fg);
-        font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;
-        padding: 1.5rem;
-      }
-      #meta { color: var(--dim); font-size: 0.8125rem; text-align: center; }
-      #status { font-size: 1.125rem; font-weight: 600; min-height: 1.5em; }
-      #status.error { color: var(--error); }
-      #board {
-        display: grid;
-        grid-template-columns: repeat(3, 5rem);
-        grid-template-rows: repeat(3, 5rem);
-        gap: 0.5rem;
-      }
-      .cell {
-        font: 600 2rem/1 inherit;
-        color: var(--fg);
-        background: #14161a;
-        border: 1px solid var(--line);
-        border-radius: 0.625rem;
-        cursor: pointer;
-        transition: background 120ms ease, transform 120ms ease;
-      }
-      .cell:not(:disabled):hover { background: #1b1e23; transform: translateY(-1px); }
-      .cell:disabled { cursor: default; opacity: 0.85; }
-      .cell.win { border-color: var(--accent); color: var(--accent); }
-      #reset {
-        font: 600 0.875rem/1 inherit;
-        color: #0b0c0e;
-        background: var(--accent);
-        border: 0;
-        border-radius: 999px;
-        padding: 0.625rem 1.25rem;
-        cursor: pointer;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .cell { transition: none; }
-      }
+      [hidden] { display: none !important; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0c1220; color: var(--ink);
+        font: 15px/1.55 "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; }
+      #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+      button { font: inherit; color: inherit; }
+      .btn { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 0.6rem 1.1rem; cursor: pointer; font-weight: 600; }
+      .btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.15); }
+      .btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+      .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+      .btn.primary { background: var(--amber); border-color: var(--amber); color: #1b1304; }
+      .btn.primary:hover:not(:disabled) { background: #ffc266; }
+      .btn.small { padding: 0.3rem 0.7rem; font-size: 0.85rem; white-space: nowrap; }
+      .row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+
+      /* ---------- menu screens ---------- */
+      #screen { position: fixed; inset: 0; overflow: auto; display: flex; align-items: flex-start; justify-content: center;
+        padding: 4vh 16px; background: linear-gradient(100deg, rgba(8, 12, 24, 0.88) 0%, rgba(8, 12, 24, 0.7) 55%, rgba(8, 12, 24, 0.42) 100%); }
+      .wrap { width: min(980px, 100%); margin: auto 0; }
+      .wrap.narrow { width: min(620px, 100%); }
+      h1 { font-size: clamp(2rem, 5vw, 3.2rem); line-height: 1.1; margin: 0 0 0.4rem; letter-spacing: -0.02em; }
+      h1 em { font-style: normal; color: var(--amber); }
+      h2 { font-size: 1.5rem; margin: 0 0 0.3rem; }
+      h3 { font-size: 1.05rem; margin: 0 0 0.3rem; }
+      p { margin: 0.3rem 0; }
+      .lead { color: var(--dim); max-width: 60ch; }
+      .eyebrow { color: var(--teal); font-weight: 700; font-size: 0.82rem; letter-spacing: 0.12em; }
+      .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.2rem; }
+      .stack { display: grid; gap: 0.9rem; }
+      .menu { display: grid; gap: 0.6rem; margin: 1.4rem 0 1rem; max-width: 340px; }
+      .menu .btn { text-align: left; padding: 0.85rem 1.1rem; font-size: 1.05rem; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.8rem; }
+      .content-card { display: grid; gap: 0.35rem; text-align: left; cursor: pointer; }
+      .content-card.locked { opacity: 0.55; cursor: not-allowed; }
+      .content-card:hover:not(.locked) { border-color: var(--amber); }
+      .chip { display: inline-block; font-size: 0.76rem; font-weight: 700; padding: 0.1rem 0.55rem; border-radius: 999px; border: 1px solid currentColor; }
+      .chip.done { color: var(--green); } .chip.open { color: var(--amber); } .chip.lock { color: var(--dim); }
+      .muted { color: var(--dim); font-size: 0.88rem; }
+      ul.tight { margin: 0.3rem 0; padding-left: 1.1rem; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+      th, td { text-align: left; padding: 0.42rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: middle; }
+      th { color: var(--dim); font-weight: 600; font-size: 0.82rem; }
+      kbd { display: inline-block; min-width: 1.9em; text-align: center; padding: 0.05rem 0.45rem; border-radius: 6px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.08); font: inherit; font-weight: 700; }
+      .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0.9rem; }
+      .option { cursor: pointer; text-align: left; }
+      .option.sel { border-color: var(--amber); box-shadow: 0 0 0 2px rgba(255, 179, 71, 0.35) inset; }
+      .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.6rem; }
+      .stat { background: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 0.6rem 0.8rem; }
+      .stat b { display: block; font-size: 1.45rem; font-variant-numeric: tabular-nums; }
+      .stat span { color: var(--dim); font-size: 0.8rem; }
+      .ok { color: var(--green); } .bad { color: var(--red); } .warn { color: var(--amber); }
+      .big-status { font-size: 2rem; font-weight: 800; }
+      .progress { height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.12); overflow: hidden; margin-top: 0.8rem; }
+      .progress > div { height: 100%; background: var(--amber); transition: width 0.3s; }
+
+      /* ---------- modal + toasts ---------- */
+      #modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(4, 7, 14, 0.66); padding: 16px; z-index: 30; }
+      .modal-box { width: min(520px, 100%); background: #131b2e; border: 1px solid var(--line); border-radius: 16px; padding: 1.3rem 1.4rem; }
+      .modal-body { color: var(--dim); margin: 0.4rem 0 1rem; }
+      #toasts { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 0.5rem; z-index: 40; max-width: min(420px, calc(100vw - 32px)); }
+      .toast { display: flex; gap: 0.7rem; align-items: center; background: #131b2e; border: 1px solid var(--line); border-left: 4px solid var(--teal); border-radius: 10px; padding: 0.6rem 0.8rem; }
+      .toast.error { border-left-color: var(--red); } .toast.ok { border-left-color: var(--green); }
+
+      /* ---------- flight HUD ---------- */
+      #hud { position: fixed; inset: 0; pointer-events: none; font-variant-numeric: tabular-nums; }
+      .hud-panel { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 0.6rem 0.8rem; }
+      #obj { left: 14px; top: 14px; width: min(320px, 42vw); }
+      #obj-type { color: var(--teal); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.1em; }
+      #obj-list { list-style: none; margin: 0.25rem 0; padding: 0; }
+      #obj-list li::before { content: "○ "; color: var(--dim); }
+      #obj-list li.done { color: var(--green); } #obj-list li.done::before { content: "● "; color: var(--green); }
+      #obj-hint { color: var(--amber); font-size: 0.86rem; margin-top: 0.3rem; }
+      #obj-fail { color: var(--dim); font-size: 0.78rem; margin-top: 0.3rem; }
+      #top-center { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+      #timer { display: inline-block; font-size: 1.7rem; font-weight: 800; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 0.1rem 0.9rem; }
+      #timer.warn { color: var(--red); }
+      #timer small { display: block; font-size: 0.68rem; font-weight: 600; color: var(--dim); margin-bottom: -0.2rem; }
+      #notice { margin-top: 0.5rem; min-height: 1.6em; font-weight: 700; text-shadow: 0 1px 6px #000; }
+      #notice.ok { color: var(--green); } #notice.warn { color: var(--amber); } #notice.bad { color: var(--red); }
+      #edge-msg { margin-top: 0.3rem; color: #fff; background: rgba(200, 40, 40, 0.85); border-radius: 8px; padding: 0.2rem 0.8rem; font-weight: 700; }
+      #stats { right: 14px; top: 14px; min-width: 170px; display: grid; gap: 0.15rem; }
+      #stats > div { display: flex; align-items: baseline; gap: 0.4rem; }
+      #stats span { color: var(--dim); font-size: 0.8rem; width: 2.6em; } #stats b { font-size: 1.15rem; min-width: 2.6em; text-align: right; } #stats i { font-style: normal; color: var(--dim); font-size: 0.78rem; }
+      .bar { flex: 1; height: 9px; border-radius: 99px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+      .bar > div { height: 100%; width: 0; background: var(--amber); }
+      #st-assist { font-size: 0.76rem; color: var(--teal); }
+      #cross { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px; border: 2px solid rgba(255, 255, 255, 0.75); border-radius: 50%; }
+      #cross::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; background: #fff; border-radius: 50%; }
+      #cross.locked { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(94, 224, 208, 0.35); transform: scale(1.25); }
+      #aim-info { position: absolute; left: 50%; top: calc(50% + 28px); transform: translateX(-50%); color: var(--teal); font-weight: 700; text-shadow: 0 1px 6px #000; white-space: nowrap; }
+      #nav { position: absolute; left: 0; top: 0; text-align: center; color: var(--amber); font-weight: 800; text-shadow: 0 1px 6px #000; transform: translate(-50%, -50%); white-space: nowrap; }
+      #nav-arrow { font-size: 1.5rem; line-height: 1; }
+      #nav.on #nav-arrow { visibility: hidden; height: 0; }
+      #center-msg { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); font-size: 1.25rem; font-weight: 800; text-align: center; text-shadow: 0 2px 10px #000; max-width: 90vw; }
+      #warns { position: absolute; left: 50%; top: 50%; }
+      .warn-arrow { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+      .warn-arrow i { position: absolute; left: -16px; top: -150px; width: 0; height: 0; border-left: 16px solid transparent; border-right: 16px solid transparent; border-bottom: 26px solid var(--red); animation: blink 0.3s 4 alternate; }
+      .warn-arrow span { position: absolute; top: -118px; left: -60px; width: 120px; text-align: center; color: var(--red); font-weight: 800; font-size: 0.8rem; text-shadow: 0 1px 4px #000; }
+      @keyframes blink { from { opacity: 1; } to { opacity: 0.25; } }
+      #combat { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(420px, 92vw); display: grid; gap: 0.3rem; }
+      .cbar { display: flex; align-items: center; gap: 0.5rem; background: var(--panel); border-radius: 10px; padding: 0.25rem 0.7rem; }
+      .cbar span { width: 3.4em; color: var(--dim); font-size: 0.8rem; } .cbar b { width: 3.6em; text-align: right; font-size: 0.86rem; }
+      #cb-hp { background: var(--green); } #cb-wpn { background: var(--teal); } #cb-shd { background: var(--blue); }
+      #cb-shd.active { background: #fff; }
+      #keys { left: 14px; bottom: 14px; font-size: 0.78rem; color: var(--dim); max-width: min(360px, 60vw); }
+      #keys b { color: var(--ink); }
+      #flash { position: absolute; inset: 0; opacity: 0; transition: opacity 0.35s; }
+      #flash.col { background: radial-gradient(transparent 45%, rgba(255, 150, 40, 0.55)); opacity: 1; transition: none; }
+      #flash.hit { background: radial-gradient(transparent 40%, rgba(255, 40, 40, 0.6)); opacity: 1; transition: none; }
+      @media (max-width: 720px) { #keys { display: none; } #obj { width: 46vw; font-size: 0.82rem; } }
+      @media (prefers-reduced-motion: reduce) { .warn-arrow i { animation: none; } .progress > div { transition: none; } }
     </style>
   </head>
   <body>
-    <p id="meta"></p>
-    <p id="status">connecting…</p>
-    <div id="board"></div>
-    <button id="reset" type="button">New round</button>
+    <canvas id="view"></canvas>
+    <div id="hud" hidden>
+      <div id="flash"></div>
+      <div class="hud-panel" id="obj">
+        <div id="obj-type"></div>
+        <h3 id="obj-title"></h3>
+        <ul id="obj-list"></ul>
+        <div id="obj-hint"></div>
+        <div id="obj-fail"></div>
+      </div>
+      <div id="top-center">
+        <div id="timer"><small id="timer-label">남은 시간</small><span id="timer-v">00:00.00</span></div>
+        <div id="notice"></div>
+        <div id="edge-msg" hidden></div>
+      </div>
+      <div class="hud-panel" id="stats">
+        <div><span>속도</span><b id="st-speed">0</b><i>m/s</i></div>
+        <div><span>고도</span><b id="st-alt">0</b><i>m</i></div>
+        <div><span>충돌</span><b id="st-col">0</b><i>회</i></div>
+        <div><span>손상</span><div class="bar"><div id="st-dmg"></div></div></div>
+        <div id="st-assist"></div>
+      </div>
+      <div id="cross"></div>
+      <div id="aim-info"></div>
+      <div id="warns"></div>
+      <div id="nav" hidden><div id="nav-arrow">▲</div><div id="nav-label"></div></div>
+      <div id="center-msg"></div>
+      <div id="combat" hidden>
+        <div class="cbar"><span>체력</span><div class="bar"><div id="cb-hp"></div></div><b id="cb-hpn">100</b></div>
+        <div class="cbar"><span>펄스</span><div class="bar"><div id="cb-wpn"></div></div><b id="cb-wpnn">준비</b></div>
+        <div class="cbar"><span>방어막</span><div class="bar"><div id="cb-shd"></div></div><b id="cb-shdn">준비</b></div>
+      </div>
+      <div class="hud-panel" id="keys"></div>
+    </div>
+    <div id="screen"></div>
+    <div id="modal" hidden></div>
+    <div id="toasts" aria-live="polite"></div>
     <script type="module" src="/client.js"></script>
   </body>
 </html>
