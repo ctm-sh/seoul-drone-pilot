@@ -158,6 +158,24 @@ export function content(app) {
   });
 }
 
+function routeMap(def) {
+  if (!def.map) return "";
+  const pts = def.map, P = (p) => `${p.x.toFixed(0)},${p.z.toFixed(0)}`;
+  const roads = [-140, -80, 0, 80, 140].map((x) => `<line x1="${x}" y1="-200" x2="${x}" y2="107"/>`).join("") + [-140, -80, -20, 40, 100].map((z) => `<line x1="-200" y1="${z}" x2="200" y2="${z}"/>`).join("");
+  const dots = pts.slice(1, -1).map((p, i) => `<circle cx="${p.x}" cy="${p.z}" r="7" fill="#ffd23f"/><text x="${p.x}" y="${p.z + 3.5}" font-size="10" text-anchor="middle" fill="#1b1304" font-weight="700">${i + 1}</text>`).join("");
+  const a = pts[0], b = pts[pts.length - 1];
+  return `<div><h3>경로 지도 (위쪽이 북쪽)</h3>
+    <svg viewBox="-205 -205 410 410" role="img" aria-label="비행 구역 경로 지도" style="width:100%;max-width:340px;background:#1a2236;border-radius:12px;border:1px solid var(--line)">
+      <rect x="-200" y="120" width="400" height="50" fill="#1b4468"/>
+      <g stroke="#3a4560" stroke-width="5">${roads}</g>
+      <g fill="rgba(255,60,60,0.35)" stroke="#ff4d4d"><rect x="-73" y="-200" width="146" height="50"/><rect x="87" y="-73" width="46" height="46"/></g>
+      <polyline points="${pts.map(P).join(" ")}" fill="none" stroke="#ffb347" stroke-width="3" stroke-dasharray="7 5"/>
+      ${dots}
+      <circle cx="${a.x}" cy="${a.z}" r="8" fill="#3ddc84"/><rect x="${b.x - 7}" y="${b.z - 7}" width="14" height="14" fill="#3a86ff"/>
+    </svg>
+    <p class="muted">초록 원 = 출발 · 노란 번호 = 통과 순서 · 파란 사각형 = 도착 · 빨간 영역 = 비행 금지</p></div>`;
+}
+
 export function briefing(app, id) {
   const def = app.contents[id];
   if (!app.unlocked(id)) return app.go("content");
@@ -167,6 +185,7 @@ export function briefing(app, id) {
     <div><h3>${def.combat ? "승리 조건" : "목표"}</h3><p>${esc(def.goal)}</p></div>
     <div><h3>${def.combat ? "적 드론 · 전투 구역 · 장비" : "경로와 규칙"}</h3><ul class="tight">${def.info.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
     <div><h3>${def.combat ? "패배 조건" : "실패 조건"}</h3><ul class="tight">${def.fails.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
+    ${routeMap(def)}
     <div class="stat-grid">
       <div class="stat"><span>제한 시간</span><b>${limit}</b></div>
       <div class="stat"><span>조작 보조 (기록 분리)</span><b style="font-size:1rem">${assistLabel(app.save.assist)}</b></div>

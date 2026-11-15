@@ -235,7 +235,7 @@ export function makeContents() {
       "전투 구역: 한강을 본뜬 강변과 두 교량 주변 — 적은 약 95m 안으로 접근하면 교전을 시작",
       "펄스 교란기(공격): 화면 중앙을 적에게 맞추고 발사 — 피해 25, 재충전 2초",
       "방어막(방어): 2초 동안 모든 방향의 피해 차단, 재사용 대기 6초",
-      "수리 키트(초록 십자): 닿으면 체력 25 회복, 체력이 가득이면 소모되지 않음",
+      "수리 키트(초록 십자): 닿으면 획득(최대 3개 보유) — 체력이 줄어 있으면 자동으로 사용해 25 회복, 체력이 가득이면 소모되지 않음",
       "모든 장비와 규칙은 허구이며 실제 무기·전술과 무관합니다",
     ],
     fails: ["플레이어 체력 100 소진 (그 외 패배 조건 없음)"],
@@ -243,7 +243,7 @@ export function makeContents() {
     create(g) {
       const T = g.THREE;
       const enemies = [], shots = [], kits = [];
-      let hp = 100, cd = 0, shieldT = 0, shieldCd = 0, kills = 0, beamT = 0;
+      let hp = 100, cd = 0, shieldT = 0, shieldCd = 0, kills = 0, beamT = 0, held = 0;
       const mkEnemy = (type, name, x, y, z, phase) => {
         const big = type === "heavy";
         const grp = new T.Group();
@@ -392,11 +392,18 @@ export function makeContents() {
           for (const k of kits) {
             if (k.taken) continue;
             k.mesh.rotation.y += dt * 2;
-            if (dist(k.pos, P) < 3.6 && hp < 100) {
-              const before = hp;
-              hp = Math.min(100, hp + 25); k.taken = true; k.mesh.visible = false;
-              g.sfx.cp(); g.notice(`수리 키트 사용 +${hp - before} (체력 ${hp})`, "ok");
-            }
+            if (dist(k.pos, P) < 3.6) {
+              if (held < 3) {
+                k.taken = true; k.mesh.visible = false; held++;
+                g.sfx.cp(); g.notice(`수리 키트 획득 (보유 ${held}/3)`, "ok");
+              } else if (!k.fullNote) { k.fullNote = true; g.notice("수리 키트는 최대 3개까지 보유할 수 있습니다", "warn"); }
+            } else k.fullNote = false;
+          }
+          // A held kit is used automatically as soon as the drone is damaged; never at full health.
+          if (held > 0 && hp < 100) {
+            const before = hp;
+            hp = Math.min(100, hp + 25); held--;
+            g.sfx.cp(); g.notice(`수리 키트 사용 +${hp - before} (체력 ${hp} · 보유 ${held}/3)`, "ok");
           }
           shield.visible = shieldT > 0;
           shield.position.set(P.x, P.y, P.z);
@@ -406,7 +413,7 @@ export function makeContents() {
           });
           if (kills >= enemies.length) g.finish(true, "지정된 적 드론을 모두 무력화했습니다");
         },
-        objective() { return { items: [{ text: `적 드론 무력화 ${kills}/${enemies.length}`, done: kills >= enemies.length }, { text: `남은 수리 키트 ${kits.filter((k) => !k.taken).length}개`, done: false }] }; },
+        objective() { return { items: [{ text: `적 드론 무력화 ${kills}/${enemies.length}`, done: kills >= enemies.length }, { text: `수리 키트 보유 ${held}/3 · 구역에 ${kits.filter((k) => !k.taken).length}개`, done: false }] }; },
         nav() {
           let best = null, bd = 1e9;
           for (const e of enemies) if (e.alive) { const d = dist(e.pos, g.drone.pos); if (d < bd) { bd = d; best = e; } }
@@ -523,5 +530,10 @@ export function makeContents() {
       };
     },
   };
+  // Top-down route points for the pre-flight briefing map.
+  C.race.map = [C.race.start, ...RACE_CP, RACE_GOAL];
+  C.arrive.map = [C.arrive.start, ARRIVE_T];
+  C.follow.map = [C.follow.start, ...FOLLOW_PATH];
+  C.deliver.map = [C.deliver.start, PICK, DROP];
   return C;
 }

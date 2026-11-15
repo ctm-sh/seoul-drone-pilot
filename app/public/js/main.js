@@ -25,7 +25,7 @@ const app = {
   go(name, arg) { endSession(); screens[name](app, arg); },
   unlocked(id) { const i = ORDER.indexOf(id); return i <= 0 || !!app.persisted.completed[ORDER[i - 1]]; },
   done(id) { return !!app.persisted.completed[id]; },
-  persist, startContent, boot, loadProgress,
+  persist, startContent: safeStart, boot, loadProgress,
   saveBindings: () => SAVE.writeBindings(app.bindings),
   setAssist(v) {
     const old = app.save.assist;
@@ -228,6 +228,7 @@ function endSession() {
 
 function startContent(id) {
   const def = app.contents[id];
+  if (debug === "failstart" && !startContent.failed) { startContent.failed = true; throw new Error("테스트용 시작 실패"); }
   endSession();
   ui.closeModal(); ui.hideScreen();
   app.input.clear(); app.input.flight = true;
@@ -241,6 +242,20 @@ function startContent(id) {
   ui.hud.show(!!def.combat);
   if (def.manualStart) ui.hud.center("Enter 또는 공격 키(게임패드 A)를 누르면 출발 — 그때부터 시간을 측정합니다");
   acc = 0; lastT = performance.now();
+}
+
+/** Start a content; if its zone or targets cannot be prepared, offer a retry instead of a broken flight. */
+function safeStart(id) {
+  try { startContent(id); }
+  catch (err) {
+    console.error(err);
+    endSession();
+    screens.content(app);
+    ui.modal({
+      title: "콘텐츠를 불러오지 못했습니다", body: "비행 구역이나 미션 정보를 준비하는 중 문제가 발생했습니다. 다시 시도하거나 콘텐츠 선택으로 돌아갈 수 있습니다.",
+      buttons: [{ label: "재시도", primary: true, onClick: () => safeStart(id) }, { label: "나가기" }],
+    });
+  }
 }
 
 function onCollision(info) {
@@ -362,7 +377,7 @@ function showPause() {
   const buttons = reason === "pad"
     ? [{ label: "확인 후 재개", primary: true, disabled: !padOK, onClick: resume }, { label: "키보드로 재개", onClick: resume }]
     : [{ label: "계속하기", primary: true, onClick: resume }];
-  buttons.push({ label: "처음부터 다시", onClick: () => startContent(s.id) });
+  buttons.push({ label: "처음부터 다시", onClick: () => safeStart(s.id) });
   buttons.push({ label: tut ? "튜토리얼 건너뛰기" : "나가기", onClick: exitFlight });
   ui.modal({ title: T[0], body: T[1], buttons });
 }
@@ -467,5 +482,5 @@ addEventListener("keydown", (e) => {
   if (e.code === "Escape" && session && session.paused && session.pauseReason !== "pad" && ui.modalOpen() && !e.repeat) { e.preventDefault(); resume(); }
 });
 SAVE.startTabHeartbeat();
-if (debug) window.__sdp = { app, drone, g, get session() { return session; }, startContent, finish, pause, resume };
+if (debug) window.__sdp = { app, drone, g, get session() { return session; }, startContent: safeStart, finish, pause, resume };
 boot();
