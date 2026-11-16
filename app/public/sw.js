@@ -1,5 +1,5 @@
 // Offline play: the flight zone and game code are fetched once, then served from cache.
-const CACHE = "seoul-drone-pilot-v1";
+const CACHE = "seoul-drone-pilot-v2";
 const FILES = [
   "/", "/client.js", "/js/main.js", "/js/save.js", "/js/input.js", "/js/world.js",
   "/js/drone.js", "/js/contents.js", "/js/ui.js", "/js/screens.js", "/vendor/three.module.min.js",

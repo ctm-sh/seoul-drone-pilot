@@ -1,7 +1,7 @@
 // Flight model shared by every content: fixed-step, deterministic, same values everywhere.
 import { BOUNDS, resolveSphere } from "./world.js";
 
-export const PHYS = { maxSpeed: 22, accel: 13, vMax: 9, vAccel: 14, yawRate: 1.9, radius: 0.7, ground: 0.45, hardLanding: 6 };
+export const PHYS = { maxSpeed: 38, accel: 21, vMax: 14, vAccel: 22, yawRate: 2.1, radius: 0.7, ground: 0.45, hardLanding: 7 };
 const approach = (v, t, d) => (v < t ? Math.min(t, v + d) : Math.max(t, v - d));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -58,7 +58,7 @@ export class Drone {
     let vf = v.x * fx + v.z * fz, vr = v.x * rx + v.z * rz;
     vf += this.tiltF * PHYS.accel * dt;
     vr += this.tiltR * PHYS.accel * dt;
-    const brake = (assist ? 9 : 3.2) * dt;
+    const brake = (assist ? 15 : 5) * dt;
     if (tz === 0) vf = approach(vf, 0, brake);
     if (tx === 0) vr = approach(vr, 0, brake);
     if (this.grounded) { vf = approach(vf, 0, 25 * dt); vr = approach(vr, 0, 25 * dt); }
@@ -67,7 +67,7 @@ export class Drone {
     v.x = fx * vf + rx * vr; v.z = fz * vf + rz * vr;
 
     if (inp.lift !== 0) v.y = clamp(v.y + inp.lift * PHYS.vAccel * dt, -PHYS.vMax, PHYS.vMax);
-    else v.y = approach(v.y, 0, (assist ? 14 : 7) * dt);
+    else v.y = approach(v.y, 0, (assist ? 22 : 10) * dt);
 
     p.x += v.x * dt; p.y += v.y * dt; p.z += v.z * dt;
 
@@ -135,6 +135,14 @@ export class Drone {
         }
       } else {
         this.contactT.set(c.box.id, this.t);
+      }
+    }
+    // Resting on a roof without pressing into it is still a landing.
+    if (!this.grounded && Math.abs(v.y) < 0.05) {
+      for (const b of world.colliders) {
+        if (p.x >= b.min[0] && p.x <= b.max[0] && p.z >= b.min[2] && p.z <= b.max[2] && Math.abs(p.y - r - b.max[1]) < 0.06) {
+          this.grounded = true; this.surfaceY = b.max[1]; break;
+        }
       }
     }
     // Wedged between obstacles: try again, then fall back to the last safe position.

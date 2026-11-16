@@ -1,7 +1,7 @@
 // Menu screens. Each function renders into #screen and wires its buttons.
 import * as ui from "./ui.js";
 import { esc, fmtTime } from "./ui.js";
-import { ORDER } from "./contents.js";
+import { MODES, ALL, DIFFS, DIFF_LABEL } from "./contents.js";
 import { KEY_ACTIONS, PAD_AXES, PAD_BUTTONS, RESERVED_KEY, keyLabel, padAxisLabel, padButtonLabel, defaultBindings } from "./input.js";
 
 const assistLabel = (on) => (on ? "켜짐 (자동 자세 안정화)" : "꺼짐 (수동 안정화)");
@@ -34,14 +34,14 @@ export function hold(app, text) {
 }
 
 export function menu(app) {
-  const done = ORDER.filter((id) => app.done(id)).length;
+  const done = ALL.filter((id) => app.doneAny(id)).length;
   const status = app.isNew
     ? "저장된 진행 상태가 없어 새 게임으로 시작합니다. 게임을 시작하면 조작 튜토리얼이 먼저 진행됩니다."
-    : `같은 브라우저에 저장된 진행 상태를 불러왔습니다 · 콘텐츠 완료 ${done}/${ORDER.length} · 튜토리얼 ${app.save.tutorialDone ? "완료" : "미완료"}`;
+    : `같은 브라우저에 저장된 진행 상태를 불러왔습니다 · 미션 완료 ${done}/${ALL.length} · 튜토리얼 ${app.save.tutorialDone ? "완료" : "미완료"}`;
   ui.screen(`<div class="wrap">
     <div class="eyebrow">SEOUL DRONE PILOT · 웹 드론 시뮬레이터</div>
     <h1>서울 <em>드론</em> 파일럿</h1>
-    <p class="lead">서울 도심을 본뜬 가벼운 3D 구역에서 드론을 조종해 도시 레이스, 싱글플레이어 미션, 가상 드론 전투를 순서대로 진행하세요. 설치 없이 키보드나 게임패드로 바로 플레이할 수 있습니다.</p>
+    <p class="lead">서울 도심을 본뜬 가벼운 3D 구역에서 드론을 조종해 레이스, 짐 나르기, 전투, 탐색 비행 모드를 골라 즐기세요. 모드마다 미션과 세 가지 난이도가 있습니다. 설치 없이 키보드나 게임패드로 바로 플레이할 수 있습니다.</p>
     <div class="menu">
       <button class="btn primary" data-act="start" autofocus>게임 시작</button>
       <button class="btn" data-act="tutorial">튜토리얼</button>
@@ -112,35 +112,37 @@ export function tutorialDone(app) {
     ${app.saveError ? `<p class="bad">완료 여부를 저장하지 못했습니다. 저장을 재시도해 주세요.</p>` : `<p class="muted">완료 여부를 이 브라우저에 저장했습니다.</p>`}
     <div class="row">
       <button class="btn primary" data-act="race" autofocus>첫 레이스 시작</button>
-      <button class="btn" data-act="content">콘텐츠 선택</button>
+      <button class="btn" data-act="content">모드 선택</button>
       ${app.saveError ? `<button class="btn" data-act="save">저장 재시도</button>` : ""}
     </div></div></div>`, {
-    race: () => app.go("briefing", "race"),
+    race: () => app.go("briefing", "race1"),
     content: () => app.go("content"),
     save: () => { app.persist(); tutorialDone(app); },
   });
 }
 
-const bestLine = (app, id) => {
+const bestOf = (app, id, diff, assist = app.save.assist) => {
   const rec = app.save.records[id];
-  const b = rec && rec[app.save.assist ? "on" : "off"];
+  return rec && rec.best && rec.best[(assist ? "on" : "off") + ":" + diff];
+};
+const bestLine = (app, id, diff) => {
+  const b = bestOf(app, id, diff);
   return b && b.bestTime != null ? `개인 최고 ${fmtTime(b.bestTime)} · ${b.bestScore}점` : "개인 최고 기록 없음";
 };
+const curDiff = (app) => (DIFF_LABEL[app.save.diff] ? app.save.diff : "normal");
 
+/** Mode select: every mode is open from the start and independent of the others. */
 export function content(app) {
-  const cards = ORDER.map((id, i) => {
-    const def = app.contents[id], done = app.done(id), open = app.unlocked(id);
-    const chip = done ? `<span class="chip done">완료</span>` : open ? `<span class="chip open">이용 가능</span>` : `<span class="chip lock">잠금</span>`;
-    const lockNote = open ? "" : `<p class="muted">'${esc(app.contents[ORDER[i - 1]].title)}' 완료 후 이용할 수 있습니다.</p>`;
-    return `<button class="card content-card ${open ? "" : "locked"}" data-act="open" data-id="${id}" ${open ? "" : 'aria-disabled="true"'}>
-      <div class="row"><span class="eyebrow">${i + 1}단계 · ${esc(def.typeLabel)}</span>${chip}</div>
-      <h3>${esc(def.title)}</h3><p class="muted">${esc(def.summary)}</p>${lockNote}
-      <p class="muted">${esc(bestLine(app, id))}</p></button>`;
+  const cards = MODES.map((m) => {
+    const done = m.missions.filter((id) => app.doneAny(id)).length;
+    return `<button class="card content-card" data-act="open" data-id="${m.id}">
+      <div class="row"><span class="eyebrow">게임 모드</span><span class="chip ${done === m.missions.length ? "done" : "open"}">미션 ${done}/${m.missions.length} 완료</span></div>
+      <h3>${esc(m.label)}</h3><p class="muted">${esc(m.desc)}</p>
+      <p class="muted">${m.missions.map((id) => esc(app.contents[id].title)).join(" · ")}</p></button>`;
   }).join("");
-  const all = ORDER.every((id) => app.done(id));
   ui.screen(`<div class="wrap">
-    <div class="eyebrow">콘텐츠 선택</div><h2>레이스 → 미션 → 전투</h2>
-    <p class="lead">${all ? "전체 콘텐츠를 완료했습니다! 기록 단축에 도전해 보세요." : "앞 단계를 완료하면 다음 콘텐츠가 열립니다. 완료한 콘텐츠는 언제든 다시 도전할 수 있습니다."}</p>
+    <div class="eyebrow">모드 선택</div><h2>어떤 모드로 비행할까요?</h2>
+    <p class="lead">모드는 서로 독립적이라 원하는 것부터 플레이할 수 있습니다. 각 모드 안에서 미션과 난이도(쉬움·보통·어려움)를 고릅니다.</p>
     <div class="grid" style="margin:1rem 0">${cards}</div>
     <div class="row">
       <button class="btn" data-act="assist">조작 보조: ${app.save.assist ? "켜짐" : "꺼짐"}</button>
@@ -149,12 +151,33 @@ export function content(app) {
       <button class="btn" data-act="tutorial">튜토리얼 ${app.save.tutorialDone ? "다시 하기" : ""}</button>
       <button class="btn" data-act="menu">메인 메뉴</button>
     </div></div>`, {
-    open: (d) => app.go("briefing", d.id),
+    open: (d) => app.go("mode", d.id),
     assist: () => app.go("assist", "content"),
     settings: () => app.go("settings", "content"),
     records: () => app.go("records", "content"),
     tutorial: () => (app.save.device ? app.go("tutorialIntro") : app.go("device", { next: "tutorialIntro" })),
     menu: () => app.go("menu"),
+  });
+}
+
+/** Mission list of one mode. */
+export function mode(app, modeId) {
+  const m = MODES.find((x) => x.id === modeId) || MODES[0];
+  const cards = m.missions.map((id, i) => {
+    const def = app.contents[id];
+    const chips = DIFFS.map(([d, label]) => `<span class="chip ${app.done(id, d) ? "done" : "lock"}">${label} ${app.done(id, d) ? "완료" : "미완료"}</span>`).join(" ");
+    return `<button class="card content-card" data-act="open" data-id="${id}">
+      <div class="row"><span class="eyebrow">${esc(m.label)} 미션 ${i + 1}</span></div>
+      <h3>${esc(def.title)}</h3><p class="muted">${esc(def.summary)}</p>
+      <div class="row">${chips}</div></button>`;
+  }).join("");
+  ui.screen(`<div class="wrap">
+    <div class="eyebrow">${esc(m.label)} 모드</div><h2>미션을 고르세요</h2>
+    <p class="lead">${esc(m.desc)} 모든 미션이 열려 있으며, 난이도는 다음 화면에서 고릅니다.</p>
+    <div class="grid" style="margin:1rem 0">${cards}</div>
+    <div class="row"><button class="btn" data-act="back">모드 선택</button></div></div>`, {
+    open: (d) => app.go("briefing", d.id),
+    back: () => app.go("content"),
   });
 }
 
@@ -165,40 +188,42 @@ function routeMap(def) {
   const dots = pts.slice(1, -1).map((p, i) => `<circle cx="${p.x}" cy="${p.z}" r="7" fill="#ffd23f"/><text x="${p.x}" y="${p.z + 3.5}" font-size="10" text-anchor="middle" fill="#1b1304" font-weight="700">${i + 1}</text>`).join("");
   const a = pts[0], b = pts[pts.length - 1];
   return `<div><h3>경로 지도 (위쪽이 북쪽)</h3>
-    <svg viewBox="-205 -205 410 410" role="img" aria-label="비행 구역 경로 지도" style="width:100%;max-width:340px;background:#1a2236;border-radius:12px;border:1px solid var(--line)">
+    <svg viewBox="-205 -205 410 410" role="img" aria-label="비행 구역 경로 지도" style="width:100%;max-width:320px;background:#1a2236;border-radius:12px;border:1px solid var(--line)">
       <rect x="-200" y="120" width="400" height="50" fill="#1b4468"/>
       <g stroke="#3a4560" stroke-width="5">${roads}</g>
-      <g fill="rgba(255,60,60,0.35)" stroke="#ff4d4d"><rect x="-73" y="-200" width="146" height="50"/><rect x="87" y="-73" width="46" height="46"/></g>
       <polyline points="${pts.map(P).join(" ")}" fill="none" stroke="#ffb347" stroke-width="3" stroke-dasharray="7 5"/>
       ${dots}
       <circle cx="${a.x}" cy="${a.z}" r="8" fill="#3ddc84"/><rect x="${b.x - 7}" y="${b.z - 7}" width="14" height="14" fill="#3a86ff"/>
     </svg>
-    <p class="muted">초록 원 = 출발 · 노란 번호 = 통과 순서 · 파란 사각형 = 도착 · 빨간 영역 = 비행 금지</p></div>`;
+    <p class="muted">초록 원 = 출발 · 노란 번호 = 진행 순서 · 파란 사각형 = 마지막 지점</p></div>`;
 }
 
 export function briefing(app, id) {
   const def = app.contents[id];
-  if (!app.unlocked(id)) return app.go("content");
-  const limit = def.timeLimit ? `${def.timeLimit}초` : "없음";
+  if (!def || !def.mode) return app.go("content");
+  const d = curDiff(app);
+  const lim = def.limit(d);
   ui.screen(`<div class="wrap narrow"><div class="card stack">
     <div class="eyebrow">${esc(def.typeLabel)} · 시작 전 안내</div><h2>${esc(def.title)}</h2>
+    <div><h3>난이도</h3><div class="row">${DIFFS.map(([k, label]) => `<button class="btn small ${k === d ? "primary" : ""}" data-act="diff" data-d="${k}">${label}${app.done(id, k) ? " ✓" : ""}</button>`).join("")}</div></div>
     <div><h3>${def.combat ? "승리 조건" : "목표"}</h3><p>${esc(def.goal)}</p></div>
-    <div><h3>${def.combat ? "적 드론 · 전투 구역 · 장비" : "경로와 규칙"}</h3><ul class="tight">${def.info.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
-    <div><h3>${def.combat ? "패배 조건" : "실패 조건"}</h3><ul class="tight">${def.fails.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
+    <div><h3>${def.combat ? "적 드론 · 전투 구역 · 장비" : "규칙"}</h3><ul class="tight">${def.info(d).map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
+    <div><h3>${def.combat ? "패배 조건" : "실패 조건"}</h3><ul class="tight">${def.fails(d).map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>
     ${routeMap(def)}
     <div class="stat-grid">
-      <div class="stat"><span>제한 시간</span><b>${limit}</b></div>
+      <div class="stat"><span>제한 시간 (${DIFF_LABEL[d]})</span><b>${lim ? lim + "초" : "없음"}</b></div>
       <div class="stat"><span>조작 보조 (기록 분리)</span><b style="font-size:1rem">${assistLabel(app.save.assist)}</b></div>
-      <div class="stat"><span>${app.save.assist ? "보조 켜짐" : "보조 꺼짐"} 기준</span><b style="font-size:1rem">${esc(bestLine(app, id))}</b></div>
+      <div class="stat"><span>${DIFF_LABEL[d]} · 보조 ${app.save.assist ? "켜짐" : "꺼짐"}</span><b style="font-size:1rem">${esc(bestLine(app, id, d))}</b></div>
     </div>
     <div class="row">
       <button class="btn primary" data-act="go" autofocus>${def.combat ? "전투 시작" : "비행 시작"}</button>
       <button class="btn" data-act="assist">조작 보조 변경</button>
-      <button class="btn" data-act="back">뒤로</button>
+      <button class="btn" data-act="back">미션 목록</button>
     </div></div></div>`, {
+    diff: (x) => { app.setDiff(x.d); briefing(app, id); },
     go: () => app.startContent(id),
     assist: () => app.go("assist", "content"),
-    back: () => app.go("content"),
+    back: () => app.go("mode", def.mode),
   });
 }
 
@@ -324,35 +349,37 @@ export function settings(app, back = "menu") {
 }
 
 export function records(app, back = "content") {
-  const cell = (b) => (b && b.bestTime != null ? `${fmtTime(b.bestTime)}<br><span class="muted">${b.bestScore}점</span>` : `<span class="muted">개인 최고 기록 없음</span>`);
-  const rows = ORDER.map((id) => {
+  const cell = (id, d) => ["on", "off"].map((a) => {
+    const b = bestOf(app, id, d, a === "on");
+    return `<span class="muted">보조 ${a === "on" ? "켜짐" : "꺼짐"}</span> ${b && b.bestTime != null ? `${fmtTime(b.bestTime)} · ${b.bestScore}점` : "—"}`;
+  }).join("<br>");
+  const rows = MODES.map((m) => `<tr><th colspan="5">${esc(m.label)}</th></tr>` + m.missions.map((id) => {
     const def = app.contents[id], rec = app.save.records[id];
-    const lastTxt = rec && rec.last ? `<span class="${rec.last.success ? "ok" : "bad"}">${rec.last.success ? "성공" : "실패"}</span> · ${fmtTime(rec.last.timeMs)} · ${rec.last.score}점 · 충돌 ${rec.last.collisions}회<br><span class="muted">시도 #${rec.last.attempt} · 보조 ${rec.last.assist ? "켜짐" : "꺼짐"}</span>` : `<span class="muted">시도 기록 없음</span>`;
-    return `<tr><td><b>${esc(def.title)}</b><br><span class="muted">${esc(def.typeLabel)}${rec ? ` · 총 ${rec.attempts}회 시도` : ""}</span></td><td>${cell(rec && rec.on)}</td><td>${cell(rec && rec.off)}</td><td>${lastTxt}</td></tr>`;
-  }).join("");
+    const lastTxt = rec && rec.last ? `<span class="${rec.last.success ? "ok" : "bad"}">${rec.last.success ? "성공" : "실패"}</span> · ${fmtTime(rec.last.timeMs)} · ${rec.last.score}점<br><span class="muted">시도 #${rec.last.attempt} · ${DIFF_LABEL[rec.last.diff] || "보통"} · 충돌 ${rec.last.collisions}회</span>` : `<span class="muted">시도 기록 없음</span>`;
+    return `<tr><td><b>${esc(def.title)}</b>${rec ? `<br><span class="muted">총 ${rec.attempts}회 시도</span>` : ""}</td>${DIFFS.map(([d]) => `<td>${cell(id, d)}</td>`).join("")}<td>${lastTxt}</td></tr>`;
+  }).join("")).join("");
   ui.screen(`<div class="wrap">
-    <div class="eyebrow">개인 최고 기록</div><h2>콘텐츠별 최고 기록</h2>
-    <p class="lead">최단 완료 시간과 최고 점수를 각각 보관하며, 조작 보조 수준별로 분리합니다. 기록은 이 브라우저에만 저장됩니다 (온라인 순위표 없음).</p>
+    <div class="eyebrow">개인 최고 기록</div><h2>모드·미션·난이도별 최고 기록</h2>
+    <p class="lead">최단 완료 시간과 최고 점수를 각각 보관하며, 난이도와 조작 보조 수준별로 분리합니다. 기록은 이 브라우저에만 저장됩니다 (온라인 순위표 없음).</p>
     <div class="card" style="margin:1rem 0; overflow:auto"><table>
-      <tr><th>콘텐츠</th><th>보조 켜짐 · 최단 시간 / 최고 점수</th><th>보조 꺼짐 · 최단 시간 / 최고 점수</th><th>최근 시도</th></tr>${rows}</table></div>
+      <tr><th>미션</th><th>쉬움</th><th>보통</th><th>어려움</th><th>최근 시도</th></tr>${rows}</table></div>
     <div class="row"><button class="btn primary" data-act="back" autofocus>뒤로</button></div></div>`, { back: () => app.go(back) });
 }
 
 export function result(app, r) {
   const def = r.def;
-  const nextId = ORDER[ORDER.indexOf(r.id) + 1];
-  const nextOpen = r.success && nextId && app.unlocked(nextId);
+  const m = MODES.find((x) => x.id === def.mode);
+  const nextId = m.missions[m.missions.indexOf(r.id) + 1];
+  const harder = { easy: "normal", normal: "hard" }[r.diff];
   let nextLine;
   if (!r.success) nextLine = "실패해도 이전 진행 데이터는 그대로 유지됩니다. 바로 재도전할 수 있습니다.";
-  else if (!nextId) nextLine = app.done(r.id) ? "마지막 콘텐츠를 완료했습니다 — 전체 콘텐츠 완료!" : "진행 상태 저장에 실패했습니다. 저장을 재시도해 주세요.";
-  else if (nextOpen) nextLine = `다음에 이용할 수 있는 콘텐츠: ${app.contents[nextId].title}`;
-  else nextLine = "진행 상태 저장에 실패해 다음 콘텐츠가 아직 잠겨 있습니다. 저장에 성공하면 열립니다.";
+  else if (nextId) nextLine = `${m.label} 모드의 다음 미션: ${app.contents[nextId].title}`;
+  else nextLine = `${m.label} 모드의 마지막 미션을 완료했습니다${harder ? " — 더 높은 난이도에 도전해 보세요." : "!"}`;
   const best = r.best || {};
-  const bestTxt = r.bestUnavailable ? "기존 개인 기록을 불러올 수 없어 최고 기록과 비교할 수 없습니다."
-    : best.bestTime != null ? `최단 시간 ${fmtTime(best.bestTime)}${r.newBestTime ? " (신기록!)" : ""} · 최고 점수 ${best.bestScore}점${r.newBestScore ? " (신기록!)" : ""}` : "개인 최고 기록 없음 — 완료하면 기록됩니다.";
-  const prev = r.prev ? `시도 #${r.prev.attempt}: ${r.prev.success ? "성공" : "실패"} · ${fmtTime(r.prev.timeMs)} · ${r.prev.score}점 · 충돌 ${r.prev.collisions}회` : "이전 시도 없음";
+  const bestTxt = best.bestTime != null ? `최단 시간 ${fmtTime(best.bestTime)}${r.newBestTime ? " (신기록!)" : ""} · 최고 점수 ${best.bestScore}점${r.newBestScore ? " (신기록!)" : ""}` : "개인 최고 기록 없음 — 완료하면 기록됩니다.";
+  const prev = r.prev ? `시도 #${r.prev.attempt} (${DIFF_LABEL[r.prev.diff] || "보통"}): ${r.prev.success ? "성공" : "실패"} · ${fmtTime(r.prev.timeMs)} · ${r.prev.score}점 · 충돌 ${r.prev.collisions}회` : "이전 시도 없음";
   ui.screen(`<div class="wrap narrow"><div class="card stack">
-    <div class="eyebrow">${esc(def.typeLabel)} · ${esc(def.title)} · 시도 #${r.attempt}</div>
+    <div class="eyebrow">${esc(def.typeLabel)} · ${esc(def.title)} · 난이도 ${DIFF_LABEL[r.diff]} · 시도 #${r.attempt}</div>
     <div class="big-status ${r.success ? "ok" : "bad"}">${r.success ? (def.combat ? "승리" : "성공") : (def.combat ? "패배" : "실패")}</div>
     <p class="lead">${esc(r.reason)}</p>
     <div class="stat-grid">
@@ -361,22 +388,23 @@ export function result(app, r) {
       <div class="stat"><span>충돌 횟수</span><b>${r.collisions}</b></div>
       <div class="stat"><span>결과 상태</span><b class="${r.success ? "ok" : "bad"}">${r.success ? "성공" : "실패"}</b></div>
     </div>
-    <div><h3>개인 최고 (보조 ${r.assist ? "켜짐" : "꺼짐"})</h3><p>${esc(bestTxt)}</p></div>
+    <div><h3>개인 최고 (${DIFF_LABEL[r.diff]} · 보조 ${r.assist ? "켜짐" : "꺼짐"})</h3><p>${esc(bestTxt)}</p></div>
     <div><h3>이전 시도</h3><p class="muted">${esc(prev)}</p></div>
     <p>${esc(nextLine)}</p>
     ${app.saveError ? `<p class="bad">결과를 저장하지 못했습니다. 결과는 이 화면에서 확인할 수 있으며, 저장을 재시도할 수 있습니다.</p>` : ""}
     <div class="row">
-      <button class="btn ${nextOpen ? "" : "primary"}" data-act="retry" ${nextOpen ? "" : "autofocus"}>재도전</button>
-      ${nextOpen ? `<button class="btn primary" data-act="next" autofocus>다음 콘텐츠</button>` : ""}
-      <button class="btn" data-act="content">콘텐츠 선택</button>
+      <button class="btn ${r.success && nextId ? "" : "primary"}" data-act="retry" ${r.success && nextId ? "" : "autofocus"}>재도전</button>
+      ${r.success && nextId ? `<button class="btn primary" data-act="next" autofocus>다음 미션</button>` : ""}
+      ${r.success && harder ? `<button class="btn" data-act="harder">난이도 올리기 (${DIFF_LABEL[harder]})</button>` : ""}
+      <button class="btn" data-act="list">미션 목록</button>
+      <button class="btn" data-act="content">모드 선택</button>
       <button class="btn" data-act="records">개인 최고 기록</button>
       ${app.saveError ? `<button class="btn" data-act="save">저장 재시도</button>` : ""}
     </div></div></div>`, {
-    retry: () => {
-      try { app.startContent(r.id); }
-      catch (e) { console.error(e); ui.toast("재도전을 시작하지 못했습니다. 다시 시도해 주세요.", { kind: "error" }); result(app, r); }
-    },
+    retry: () => app.startContent(r.id),
     next: () => app.go("briefing", nextId),
+    harder: () => { app.setDiff(harder); app.go("briefing", r.id); },
+    list: () => app.go("mode", def.mode),
     content: () => app.go("content"),
     records: () => app.go("records", "content"),
     save: () => { app.persist(); result(app, r); },

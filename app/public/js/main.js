@@ -3,7 +3,7 @@ import * as SAVE from "./save.js";
 import { Input, defaultBindings, mergeBindings, keyLabel, padAxisLabel, padButtonLabel } from "./input.js";
 import { buildWorld, makeMarkers, rayBoxes } from "./world.js";
 import { Drone } from "./drone.js";
-import { makeContents, ORDER } from "./contents.js";
+import { makeContents, DIFF_LABEL } from "./contents.js";
 import * as ui from "./ui.js";
 import { esc } from "./ui.js";
 import * as screens from "./screens.js";
@@ -23,8 +23,9 @@ const app = {
   save: SAVE.freshSave(), persisted: SAVE.freshSave(), bindings: defaultBindings(), contents: makeContents(),
   input: null, isNew: true, saveError: null,
   go(name, arg) { endSession(); screens[name](app, arg); },
-  unlocked(id) { const i = ORDER.indexOf(id); return i <= 0 || !!app.persisted.completed[ORDER[i - 1]]; },
-  done(id) { return !!app.persisted.completed[id]; },
+  done(id, diff) { return !!app.persisted.completed[id + ":" + diff]; },
+  doneAny(id) { return ["easy", "normal", "hard"].some((d) => app.persisted.completed[id + ":" + d]); },
+  setDiff(d) { app.save.diff = d; persist(true); },
   persist, startContent: safeStart, boot, loadProgress,
   saveBindings: () => SAVE.writeBindings(app.bindings),
   setAssist(v) {
@@ -195,7 +196,7 @@ function camState() {
 // ---------------------------------------------------------------------------------- session
 const g = {
   get THREE() { return THREE; }, get scene() { return scene; }, get world() { return world; }, get markers() { return markers; },
-  get dyn() { return dyn; }, get session() { return session; },
+  get dyn() { return dyn; }, get session() { return session; }, get diff() { return session ? session.diff : "normal"; },
   drone, hud: ui.hud, sfx: ui.sfx,
   notice: (t, kind, ms) => ui.hud.notice(t, kind, ms),
   finish, aim: camState, hint,
@@ -236,7 +237,8 @@ function startContent(id) {
   app.save.attemptSeq = (app.save.attemptSeq || 0) + 1;
   drone.reset(def.start, def.start.yaw);
   // The assist level is fixed for the whole flight; it can only change before take-off.
-  session = { id, def, assist: !!app.save.assist, time: 0, collisions: 0, damage: 0, phase: def.manualStart ? "ready" : "running", ended: false, paused: false, pauseReason: null, attempt: app.save.attemptSeq, frames: 0, boundaryT: 0, noFlyT: 0, rt: null };
+  const diff = def.type === "tutorial" ? "normal" : (DIFF_LABEL[app.save.diff] ? app.save.diff : "normal");
+  session = { id, def, diff, limit: def.limit(diff), assist: !!app.save.assist, time: 0, collisions: 0, damage: 0, phase: def.manualStart ? "ready" : "running", ended: false, paused: false, pauseReason: null, attempt: app.save.attemptSeq, frames: 0, boundaryT: 0, noFlyT: 0, rt: null };
   session.rt = def.create(g);
   droneMesh.visible = true;
   ui.hud.show(!!def.combat);
@@ -263,7 +265,7 @@ function onCollision(info) {
   s.collisions++;
   const band = t.bands.find((b) => info.speed <= b.max);
   const repeat = s.collisions > t.repeatAfter;
-  const dmg = Math.round(band.dmg * (repeat ? t.repeatMult : 1));
+  const dmg = Math.round(band.dmg * (repeat ? t.repeatMult : 1) * ({ easy: 0.7, hard: 1.4 }[s.diff] || 1));
   s.damage = Math.min(100, s.damage + dmg);
   ui.hud.flash("col"); ui.sfx.hit();
   ui.hud.notice(`충돌! 속도 ${info.speed.toFixed(0)} m/s${dmg ? ` · 손상 +${dmg}%` : " · 감속"}`, "bad");
@@ -287,7 +289,7 @@ function simStep(dt, inp) {
   if (s.ended) return;
   s.rt.update(dt, inp);
   // Strictly greater: arriving at exactly the limit still counts.
-  if (!s.ended && s.def.timeLimit && s.time > s.def.timeLimit) finish(false, "제한 시간을 초과했습니다");
+  if (!s.ended && s.limit && s.time > s.limit) finish(false, "제한 시간을 초과했습니다");
 }
 
 function finish(success, reason) {
@@ -295,7 +297,7 @@ function finish(success, reason) {
   if (!s || s.ended) return;
   s.ended = true;
   app.input.flight = false;
-  const res = { id: s.id, def: s.def, success, reason, timeMs: Math.round(s.time * 1000), collisions: s.collisions, damage: s.damage, assist: s.assist, attempt: s.attempt };
+  const res = { id: s.id, def: s.def, success, reason, timeMs: Math.round(s.time * 1000), collisions: s.collisions, damage: s.damage, assist: s.assist, diff: s.diff, attempt: s.attempt };
   res.score = s.rt.score(res);
   ui.hud.center(success ? "성공!" : "실패");
   if (success) ui.sfx.ok(); else ui.sfx.fail();
@@ -318,19 +320,20 @@ function finish(success, reason) {
 function commit(res) {
   const sv = app.save;
   let rec = sv.records[res.id];
-  if (!rec || typeof rec !== "object") rec = sv.records[res.id] = { on: {}, off: {}, last: null, attempts: 0 };
-  const key = res.assist ? "on" : "off";
-  if (!rec[key] || typeof rec[key] !== "object") { rec[key] = {}; }
-  const b = rec[key];
+  if (!rec || typeof rec !== "object") rec = sv.records[res.id] = { best: {}, last: null, attempts: 0 };
+  if (!rec.best || typeof rec.best !== "object") rec.best = {};
+  // Records are kept apart per assist level and per difficulty.
+  const key = (res.assist ? "on" : "off") + ":" + res.diff;
+  const b = rec.best[key] || (rec.best[key] = {});
   res.prev = rec.last;
-  rec.last = { success: res.success, timeMs: res.timeMs, score: res.score, collisions: res.collisions, assist: res.assist, attempt: res.attempt };
+  rec.last = { success: res.success, timeMs: res.timeMs, score: res.score, collisions: res.collisions, assist: res.assist, diff: res.diff, attempt: res.attempt };
   rec.attempts = (rec.attempts || 0) + 1;
   if (res.success) {
     res.newBestTime = b.bestTime == null || res.timeMs < b.bestTime;
     res.newBestScore = b.bestScore == null || res.score > b.bestScore;
     if (res.newBestTime) b.bestTime = res.timeMs;
     if (res.newBestScore) b.bestScore = res.score;
-    sv.completed[res.id] = true;
+    sv.completed[res.id + ":" + res.diff] = true;
   }
   res.best = { bestTime: b.bestTime, bestScore: b.bestScore };
   persist();
@@ -406,13 +409,16 @@ function updateFlightView(dt) {
   const bm = world.boundaryMat;
   bm.opacity += ((s.boundaryT > 0 ? 0.55 : 0) - bm.opacity) * Math.min(1, dt * 10);
   ui.hud.edge(s.boundaryT > 0 ? "구역 밖으로 이동할 수 없습니다" : s.noFlyT > 0 ? "비행 제한 영역에는 진입할 수 없습니다" : null);
-  if (def.timeLimit) {
-    const left = Math.max(0, def.timeLimit - s.time);
+  // A little extra field of view at speed makes the higher top speed readable.
+  const fov = 62 + Math.min(16, Math.hypot(drone.vel.x, drone.vel.z) * 0.42);
+  if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 5); camera.updateProjectionMatrix(); }
+  if (s.limit) {
+    const left = Math.max(0, s.limit - s.time);
     ui.hud.timer(s.phase === "ready" ? "제한 시간 (출발 대기)" : "남은 시간", ui.fmtTime(left * 1000), left < 10);
   } else ui.hud.timer("경과 시간", ui.fmtTime(s.time * 1000), false);
   ui.hud.stats(Math.hypot(drone.vel.x, drone.vel.y, drone.vel.z), Math.max(0, drone.pos.y - 0.45), s.collisions, s.damage, s.assist);
   const o = s.rt.objective();
-  ui.hud.objective({ type: def.typeLabel, title: o.title || def.title, items: o.items, fails: o.fails || def.fails || [], hint: o.hint || "" });
+  ui.hud.objective({ type: def.type === "tutorial" ? def.typeLabel : `${def.typeLabel} · 난이도 ${DIFF_LABEL[s.diff]}`, title: o.title || def.title, items: o.items, fails: o.fails || (def.fails ? def.fails(s.diff) : []), hint: o.hint || "" });
   ui.hud.keys(hint("all"));
   const n = s.rt.nav && s.rt.nav();
   if (!n) ui.hud.nav(null);

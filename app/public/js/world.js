@@ -224,7 +224,7 @@ export function buildWorld(THREE, scene) {
   addBox(-128, -68, -92, -32, 0, 38, C("#c9c2b4"));
   addBox(90, -10, 131, 30, 0, 52, C("#b6bcc6"));
   addBox(149, -10, 196, 30, 0, 44, C("#d6cfc2"));
-  // Restricted compound (no-fly zone 2) — low service buildings.
+  // Low service compound.
   addBox(92, -68, 110, -50, 0, 12, C("#8e9299"), { plain: true });
   addBox(114, -48, 128, -32, 0, 9, C("#8e9299"), { plain: true });
   // Observation tower on a podium (major obstacle).
@@ -318,12 +318,13 @@ export function buildWorld(THREE, scene) {
   const mtx = new THREE.Matrix4();
   treePos.forEach((t, i) => { mtx.makeTranslation(t[0], 3.4, t[1]); trees.setMatrixAt(i, mtx); });
   group.add(trees);
-  // palace-style compound inside the first no-fly zone (generic hanok shapes)
+  // palace-style compound (generic hanok shapes, open to fly over)
   const hanok = (x, z, w, d, h) => {
     const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: 0x8c3b2e }));
     body.position.set(x, h / 2, z); group.add(body);
     const roof = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 4), new THREE.MeshLambertMaterial({ color: 0x2d3a3f }));
     roof.rotation.y = Math.PI / 4; roof.scale.set(w * 0.85, h * 0.7, d * 0.85); roof.position.set(x, h + h * 0.35, z); group.add(roof);
+    colliders.push({ id: nextId++, min: [x - w / 2, 0, z - d / 2], max: [x + w / 2, h * 1.5, z + d / 2], kind: "building" });
   };
   hanok(0, -153, 30, 8, 9); hanok(0, -180, 40, 18, 11); hanok(-45, -178, 20, 12, 7); hanok(45, -178, 20, 12, 7);
   const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2.5, 24, 8), new THREE.MeshLambertMaterial({ color: 0xd9dde2 }));
@@ -344,7 +345,7 @@ export function buildWorld(THREE, scene) {
   pg.strokeStyle = "#ffd23f"; pg.lineWidth = 12; pg.beginPath(); pg.arc(128, 128, 112, 0, 7); pg.stroke();
   pg.fillStyle = "#fff"; pg.fillRect(78, 66, 24, 124); pg.fillRect(154, 66, 24, 124); pg.fillRect(78, 116, 100, 24);
   const padTex = new THREE.CanvasTexture(padCanvas); padTex.colorSpace = THREE.SRGBColorSpace;
-  for (const p of [PADS.towerA, PADS.towerB, PADS.park]) {
+  for (const p of [PADS.towerA, PADS.towerB, PADS.park, PADS.plaza]) {
     const m = new THREE.Mesh(new THREE.CircleGeometry(7, 40), new THREE.MeshBasicMaterial({ map: padTex, transparent: true }));
     m.rotation.x = -Math.PI / 2; m.position.set(p.x, p.y + 0.12, p.z); group.add(m);
   }
@@ -365,8 +366,7 @@ export function buildWorld(THREE, scene) {
       const s = iconSprite(THREE, "nofly", label, "#ff4d4d", false, 4.6); s.position.set(sx, 24, sz); group.add(s);
     }
   }
-  addNoFly(-73, -200, 73, -150, "비행 금지");
-  addNoFly(87, -73, 133, -27, "비행 금지");
+  // The whole district is open airspace: no restricted areas are placed (addNoFly stays available for later use).
 
   // Boundary walls: only visible while the drone pushes against the edge.
   const bc = document.createElement("canvas"); bc.width = bc.height = 64;
